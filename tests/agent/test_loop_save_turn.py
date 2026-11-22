@@ -396,6 +396,35 @@ async def test_generate_webui_title_only_for_marked_webui_sessions(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(("content", "finish_reason", "expected"), [
+    ("", "length", "Help me understand why this topic stays untitled"),
+    ("Title generation", "length", "Title generation"),
+    ("", "stop", None),
+])
+async def test_webui_title_output_budget(
+    tmp_path: Path, content: str, finish_reason: str, expected: str | None,
+) -> None:
+    loop = _make_full_loop(tmp_path)
+    loop.provider.chat_stream_with_retry = AsyncMock(
+        return_value=LLMResponse(content=content, finish_reason=finish_reason)
+    )
+    session = loop.sessions.get_or_create("websocket:title-budget")
+    session.metadata[WEBUI_SESSION_METADATA_KEY] = True
+    session.add_message("user", "Help me understand why this topic stays untitled after chatting")
+    loop.sessions.save(session)
+
+    generated = await maybe_generate_webui_title(
+        sessions=loop.sessions, session_key=session.key,
+        provider=loop.provider, model="kimi-k3.1-pro",
+    )
+
+    assert generated is (expected is not None)
+    session = await loop.sessions.state.get(session.key)
+    assert session.metadata.get(WEBUI_TITLE_METADATA_KEY) == expected
+    loop.provider.chat_stream_with_retry.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_generate_webui_title_skips_plain_websocket_sessions(tmp_path: Path) -> None:
     loop = _make_full_loop(tmp_path)
     loop.provider.chat_stream_with_retry = AsyncMock(

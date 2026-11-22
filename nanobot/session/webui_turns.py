@@ -228,7 +228,11 @@ async def maybe_generate_webui_title(
         return False
 
     title = clean_generated_title(response.content)
-    if not title or title.lower().startswith("error"):
+    if title.lower().startswith("error"):
+        title = ""
+    elif not title and response.finish_reason == "length":
+        title = clean_generated_title(" ".join(user_text.split()[:8]))
+    if not title:
         logger.debug(
             "WebUI title generation returned no usable title for {} (finish_reason={})",
             session_key,
